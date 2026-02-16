@@ -2,8 +2,9 @@ package config
 
 import (
 	"errors"
+	"flag"
 	"fmt"
-	"strconv"
+	"io"
 	"strings"
 )
 
@@ -18,169 +19,109 @@ type Config struct {
 	Transforms   []string
 }
 
+var (
+	defaultTransforms       = []string{"stripimports", "errcompact"}
+	defaultTransformsString = strings.Join(defaultTransforms, ",")
+)
+
 func HelpText(availableTransforms []string) string {
-	transformList := strings.Join(availableTransforms, ", ")
-	if transformList == "" {
-		transformList = "(none)"
-	}
-
-	return strings.TrimSpace(fmt.Sprintf(`
-Usage:
-  gophershot [input.go|-] --out output.png [--lines selector] [--transform name]... [--line-numbers[=true|false]] [--font-size points]
-
-Description:
-  Read Go source code from a file or stdin and render it as a PNG image.
-
-Flags:
-  --out string
-      Output PNG path (required).
-  --lines string
-      Line selector, either range "start:end" (inclusive) or list "1,2,5".
-      If repeated, the last value wins.
-  --transform string
-      Source transform name (repeatable). Available: %s
-  --line-numbers[=true|false]
-      Render line numbers in the output image (default: true).
-  --font-size float
-      Font size in points for rendered code text (must be > 0, default: 16).
-  -h, --help
-      Show this help.
-`, transformList))
+	fs, _ := newFlagSet("gophershot", availableTransforms)
+	var out strings.Builder
+	fs.SetOutput(&out)
+	fs.Usage()
+	return strings.TrimSpace(out.String())
 }
 
 func Parse(args []string) (Config, error) {
-	cfg := Config{InputPath: "-", LineNumbers: true}
-	positionals := make([]string, 0, 1)
+	fs, opts := newFlagSet("gophershot", nil)
+	fs.SetOutput(io.Discard)
 
-	for i := 0; i < len(args); i++ {
-		arg := args[i]
-
-		switch {
-		case arg == "-h" || arg == "--help":
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
 			return Config{}, ErrHelp
-		case arg == "--":
-			positionals = append(positionals, args[i+1:]...)
-			i = len(args)
-		case strings.HasPrefix(arg, "--out="):
-			cfg.OutputPath = strings.TrimSpace(strings.TrimPrefix(arg, "--out="))
-		case arg == "--out":
-			next, err := consumeValue(args, &i, "--out")
-			if err != nil {
-				return Config{}, err
-			}
-			cfg.OutputPath = strings.TrimSpace(next)
-		case strings.HasPrefix(arg, "--lines="):
-			cfg.LineSelector = strings.TrimSpace(strings.TrimPrefix(arg, "--lines="))
-		case arg == "--lines":
-			next, err := consumeValue(args, &i, "--lines")
-			if err != nil {
-				return Config{}, err
-			}
-			cfg.LineSelector = strings.TrimSpace(next)
-		case strings.HasPrefix(arg, "--transform="):
-			name := strings.TrimSpace(strings.TrimPrefix(arg, "--transform="))
-			if name == "" {
-				return Config{}, errors.New("--transform cannot be empty")
-			}
-			cfg.Transforms = append(cfg.Transforms, name)
-		case arg == "--transform":
-			next, err := consumeValue(args, &i, "--transform")
-			if err != nil {
-				return Config{}, err
-			}
-			name := strings.TrimSpace(next)
-			if name == "" {
-				return Config{}, errors.New("--transform cannot be empty")
-			}
-			cfg.Transforms = append(cfg.Transforms, name)
-		case strings.HasPrefix(arg, "--line-numbers="):
-			value := strings.TrimSpace(strings.TrimPrefix(arg, "--line-numbers="))
-			parsed, err := parseBoolFlag("--line-numbers", value)
-			if err != nil {
-				return Config{}, err
-			}
-			cfg.LineNumbers = parsed
-		case arg == "--line-numbers":
-			if i+1 < len(args) {
-				if parsed, ok := tryParseBoolValue(args[i+1]); ok {
-					cfg.LineNumbers = parsed
-					i++
-					break
-				}
-			}
-			cfg.LineNumbers = true
-		case strings.HasPrefix(arg, "--font-size="):
-			value := strings.TrimSpace(strings.TrimPrefix(arg, "--font-size="))
-			parsed, err := parsePositiveFloatFlag("--font-size", value)
-			if err != nil {
-				return Config{}, err
-			}
-			cfg.FontSize = parsed
-		case arg == "--font-size":
-			next, err := consumeValue(args, &i, "--font-size")
-			if err != nil {
-				return Config{}, err
-			}
-			parsed, err := parsePositiveFloatFlag("--font-size", strings.TrimSpace(next))
-			if err != nil {
-				return Config{}, err
-			}
-			cfg.FontSize = parsed
-		case arg == "-":
-			positionals = append(positionals, arg)
-		case strings.HasPrefix(arg, "-"):
-			return Config{}, fmt.Errorf("unknown flag %q", arg)
-		default:
-			positionals = append(positionals, arg)
 		}
+		return Config{}, err
 	}
 
+	positionals := fs.Args()
 	if len(positionals) > 1 {
 		return Config{}, fmt.Errorf("expected at most one input path, got %d", len(positionals))
 	}
+	inputPath := "-"
 	if len(positionals) == 1 {
-		cfg.InputPath = positionals[0]
+		inputPath = positionals[0]
 	}
-	if strings.TrimSpace(cfg.OutputPath) == "" {
+
+	outputPath := strings.TrimSpace(opts.outputPath)
+	if outputPath == "" {
 		return Config{}, errors.New("--out is required")
 	}
-	cfg.OutputPath = strings.TrimSpace(cfg.OutputPath)
 
-	return cfg, nil
-}
-
-func consumeValue(args []string, index *int, flagName string) (string, error) {
-	next := *index + 1
-	if next >= len(args) {
-		return "", fmt.Errorf("%s requires a value", flagName)
+	fontSize := opts.fontSize
+	if fontSize <= 0 {
+		return Config{}, fmt.Errorf("--font-size expects a value greater than zero, got %v", fontSize)
 	}
-	*index = next
-	return args[next], nil
-}
 
-func parseBoolFlag(flagName, value string) (bool, error) {
-	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
+	transforms, err := parseCommaSeparated("--transform", opts.transformRaw)
 	if err != nil {
-		return false, fmt.Errorf("%s expects a boolean value, got %q", flagName, value)
+		return Config{}, err
 	}
-	return parsed, nil
+	if len(transforms) == 0 {
+		transforms = append(transforms, defaultTransforms...)
+	}
+
+	return Config{
+		InputPath:    inputPath,
+		OutputPath:   outputPath,
+		LineSelector: strings.TrimSpace(opts.lineSelectorRaw),
+		LineNumbers:  opts.lineNumbers,
+		FontSize:     fontSize,
+		Transforms:   transforms,
+	}, nil
 }
 
-func tryParseBoolValue(value string) (bool, bool) {
-	parsed, err := strconv.ParseBool(strings.TrimSpace(value))
-	if err != nil {
-		return false, false
-	}
-	return parsed, true
+type parseOptions struct {
+	outputPath      string
+	lineSelectorRaw string
+	transformRaw    string
+	lineNumbers     bool
+	fontSize        float64
 }
 
-func parsePositiveFloatFlag(flagName, value string) (float64, error) {
-	parsed, err := strconv.ParseFloat(strings.TrimSpace(value), 64)
-	if err != nil {
-		return 0, fmt.Errorf("%s expects a numeric value, got %q", flagName, value)
+func newFlagSet(name string, availableTransforms []string) (*flag.FlagSet, *parseOptions) {
+	opts := &parseOptions{}
+
+	fs := flag.NewFlagSet(name, flag.ContinueOnError)
+	fs.StringVar(&opts.outputPath, "out", "", "output PNG path (required)")
+	fs.StringVar(&opts.lineSelectorRaw, "lines", "", "comma-separated line selector segments; each segment is a line (7) or range (5:9)")
+	fs.StringVar(&opts.transformRaw, "transform", defaultTransformsString, transformUsage(availableTransforms))
+	fs.BoolVar(&opts.lineNumbers, "line-numbers", true, "render line numbers in the output image")
+	fs.Float64Var(&opts.fontSize, "font-size", 16, "font size in points for rendered code text")
+
+	return fs, opts
+}
+
+func transformUsage(availableTransforms []string) string {
+	available := strings.Join(availableTransforms, ", ")
+	if available == "" {
+		available = strings.Join(defaultTransforms, ", ")
 	}
-	if parsed <= 0 {
-		return 0, fmt.Errorf("%s expects a value greater than zero, got %q", flagName, value)
+	return fmt.Sprintf("comma-separated list of transform names, applied in order (available: %s)", available)
+}
+
+func parseCommaSeparated(flagName, value string) ([]string, error) {
+	if strings.TrimSpace(value) == "" {
+		return nil, nil
 	}
-	return parsed, nil
+
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			return nil, fmt.Errorf("%s cannot contain empty values", flagName)
+		}
+		items = append(items, trimmed)
+	}
+	return items, nil
 }

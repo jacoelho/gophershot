@@ -21,7 +21,7 @@ func TestRunFileInput(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	code := run([]string{input, "--out", output}, bytes.NewBuffer(nil), &stdout, &stderr)
+	code := run([]string{"--out", output, input}, bytes.NewBuffer(nil), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr=%q)", code, stderr.String())
 	}
@@ -100,11 +100,10 @@ func f() error {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	code := run([]string{
-		input,
 		"--out", output,
-		"--transform", "stripimports",
-		"--transform", "errcompact",
+		"--transform", "stripimports,errcompact",
 		"--lines", "6:10",
+		input,
 	}, bytes.NewBuffer(nil), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr=%q)", code, stderr.String())
@@ -136,7 +135,7 @@ func TestRunHelp(t *testing.T) {
 	if stdout.Len() == 0 {
 		t.Fatal("expected help text on output")
 	}
-	if !strings.Contains(stdout.String(), "Usage:") {
+	if !strings.Contains(stdout.String(), "Usage of gophershot:") {
 		t.Fatalf("expected usage text, got %q", stdout.String())
 	}
 	if stderr.Len() != 0 {
