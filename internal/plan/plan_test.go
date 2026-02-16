@@ -50,7 +50,7 @@ func TestCompileValidRequest(t *testing.T) {
 	}
 
 	compiled, err := Compile(Request{
-		LineSelector: "1:3",
+		LineSelector: "1:3,5",
 		LineNumbers:  true,
 		FontSize:     22,
 		Transforms:   []string{"first", "second"},
@@ -59,8 +59,8 @@ func TestCompileValidRequest(t *testing.T) {
 		t.Fatalf("compile: %v", err)
 	}
 
-	if compiled.Selector != "1:3" {
-		t.Fatalf("selector = %q, want 1:3", compiled.Selector)
+	if compiled.Selector != "1:3,5" {
+		t.Fatalf("selector = %q, want %q", compiled.Selector, "1:3,5")
 	}
 	if !compiled.Render.ShowLineNumbers {
 		t.Fatal("expected line numbers enabled")
@@ -136,6 +136,23 @@ func TestCompileEmptyRequestIsValid(t *testing.T) {
 	}
 	if compiled.Render.FontSize != 0 {
 		t.Fatalf("font size = %v, want 0", compiled.Render.FontSize)
+	}
+}
+
+func TestCompileTrimsSelector(t *testing.T) {
+	t.Parallel()
+
+	catalog := fakeCatalog{items: map[string]transform.Transform{}}
+
+	compiled, err := Compile(Request{
+		LineSelector: " 2:3 ",
+	}, catalog)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+
+	if compiled.Selector != "2:3" {
+		t.Fatalf("selector = %q, want 2:3", compiled.Selector)
 	}
 }
 

@@ -142,3 +142,23 @@ func f() error {
 		t.Fatalf("unexpected package line in selected output:\n%s", got)
 	}
 }
+
+func TestExecuteSupportsMixedSelectorSegments(t *testing.T) {
+	t.Parallel()
+
+	out, err := Execute([]byte("a\nb\nc\nd\n"), plan.Plan{
+		Selector: "1:2,4",
+	})
+	if err != nil {
+		t.Fatalf("execute: %v", err)
+	}
+
+	want := doc.Document{Lines: []doc.Line{
+		{Text: "a", Origins: []int{1}},
+		{Text: "b", Origins: []int{2}},
+		{Text: "d", Origins: []int{4}},
+	}}
+	if !reflect.DeepEqual(out, want) {
+		t.Fatalf("got %#v, want %#v", out, want)
+	}
+}

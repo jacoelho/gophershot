@@ -66,17 +66,40 @@ func matchesAnyOrigin(origins []int, wanted map[int]struct{}) bool {
 }
 
 func parseSelector(selector string) ([]int, error) {
-	hasComma := strings.Contains(selector, ",")
-	hasColon := strings.Contains(selector, ":")
+	parts := strings.Split(selector, ",")
+	set := make(map[int]struct{}, len(parts))
 
-	if hasComma && hasColon {
-		return nil, fmt.Errorf("invalid --lines %q: range and list forms cannot be mixed", selector)
+	for _, part := range parts {
+		segment := strings.TrimSpace(part)
+		if segment == "" {
+			return nil, fmt.Errorf("invalid line selector %q", selector)
+		}
+
+		if strings.Contains(segment, ":") {
+			indices, err := parseRange(segment)
+			if err != nil {
+				return nil, err
+			}
+			for _, n := range indices {
+				set[n] = struct{}{}
+			}
+			continue
+		}
+
+		n, err := parsePositiveInt(segment)
+		if err != nil {
+			return nil, fmt.Errorf("invalid line selector %q", selector)
+		}
+		set[n] = struct{}{}
 	}
 
-	if hasColon {
-		return parseRange(selector)
+	indices := slices.Collect(maps.Keys(set))
+	slices.Sort(indices)
+
+	if len(indices) == 0 {
+		return nil, fmt.Errorf("invalid line selector %q", selector)
 	}
-	return parseList(selector)
+	return indices, nil
 }
 
 func parseRange(selector string) ([]int, error) {
@@ -84,7 +107,6 @@ func parseRange(selector string) ([]int, error) {
 	if len(parts) != 2 {
 		return nil, invalidLineRangeError(selector)
 	}
-
 	start, err := parsePositiveInt(parts[0])
 	if err != nil {
 		return nil, invalidLineRangeError(selector)
@@ -101,27 +123,6 @@ func parseRange(selector string) ([]int, error) {
 	indices := make([]int, 0, end-start+1)
 	for i := start; i <= end; i++ {
 		indices = append(indices, i)
-	}
-	return indices, nil
-}
-
-func parseList(selector string) ([]int, error) {
-	parts := strings.Split(selector, ",")
-	set := make(map[int]struct{}, len(parts))
-
-	for _, part := range parts {
-		n, err := parsePositiveInt(part)
-		if err != nil {
-			return nil, fmt.Errorf("invalid line list %q", selector)
-		}
-		set[n] = struct{}{}
-	}
-
-	indices := slices.Collect(maps.Keys(set))
-	slices.Sort(indices)
-
-	if len(indices) == 0 {
-		return nil, fmt.Errorf("invalid line list %q", selector)
 	}
 	return indices, nil
 }

@@ -15,7 +15,7 @@ go build -o bin/gophershot ./cmd/gophershot
 Using the built binary:
 
 ```bash
-./bin/gophershot internal/app/run.go --out example.png
+./bin/gophershot --out example.png internal/app/run.go
 ```
 
 From stdin:
@@ -32,20 +32,19 @@ cat internal/app/run.go | ./bin/gophershot --out example.png
 
 ```bash
 ./bin/gophershot \
-  internal/app/run.go \
   --out example.png \
-  --transform stripimports \
-  --transform errcompact \
-  --lines 107:143 \
+  --transform stripimports,errcompact \
+  --lines 15:40,44,48:52 \
   --line-numbers=true \
-  --font-size 16
+  --font-size 16 \
+  internal/app/run.go
 ```
 
 ## Flags
 
 - `--out <path>`: output PNG path (required)
-- `--lines <selector>`: either range (`start:end`) or list (`1,2,5`)
-- `--transform <name>`: repeatable, applied in the order provided
+- `--lines <selector>`: comma-separated segments, each segment is a line (`7`) or range (`5:9`); if repeated, the last value is used
+- `--transform <names>`: comma-separated names, applied in order; if repeated, the last value is used; defaults to `stripimports,errcompact` when omitted
 - `--line-numbers[=true|false]`: show line numbers (default: `true`)
 - `--font-size <float>`: code font size in points, must be `> 0` (default: `16`)
 - `-h`, `--help`: show help
@@ -59,6 +58,7 @@ cat internal/app/run.go | ./bin/gophershot --out example.png
 
 - Transforms run on the full file first.
 - Line selection is applied after transforms, using original source line origins.
+- Flags must be provided before the input path.
 
 ## Development
 

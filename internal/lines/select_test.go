@@ -57,12 +57,21 @@ func TestSelectUsesOriginsNotRenderedIndex(t *testing.T) {
 	}
 }
 
-func TestSelectMixedRangeAndListIsInvalid(t *testing.T) {
+func TestSelectMixedRangeAndListSegmentsAreValid(t *testing.T) {
 	t.Parallel()
 
-	_, err := Select(doc.FromSource([]byte("a\n")), "1:2,3")
-	if err == nil {
-		t.Fatal("expected error")
+	got, err := Select(doc.FromSource([]byte("a\nb\nc\nd\n")), "1:2,4")
+	if err != nil {
+		t.Fatalf("select: %v", err)
+	}
+
+	want := doc.Document{Lines: []doc.Line{
+		{Text: "a", Origins: []int{1}},
+		{Text: "b", Origins: []int{2}},
+		{Text: "d", Origins: []int{4}},
+	}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("got %#v, want %#v", got, want)
 	}
 }
 
@@ -76,6 +85,15 @@ func TestSelectNoMatches(t *testing.T) {
 	var noMatches NoMatchesError
 	if !errors.As(err, &noMatches) {
 		t.Fatalf("expected NoMatchesError, got %v", err)
+	}
+}
+
+func TestSelectInvalidEmptySegment(t *testing.T) {
+	t.Parallel()
+
+	_, err := Select(doc.FromSource([]byte("a\nb\n")), "1,,2")
+	if err == nil {
+		t.Fatal("expected error")
 	}
 }
 
