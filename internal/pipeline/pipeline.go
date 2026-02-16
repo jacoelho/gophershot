@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jacoelho/gophershot/internal/core/plan"
 	"github.com/jacoelho/gophershot/internal/doc"
 	"github.com/jacoelho/gophershot/internal/lines"
+	"github.com/jacoelho/gophershot/internal/plan"
 )
 
 var ErrNoLinesMatched = errors.New("no lines matched")

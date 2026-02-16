@@ -82,16 +82,16 @@ func parseSelector(selector string) ([]int, error) {
 func parseRange(selector string) ([]int, error) {
 	parts := strings.Split(selector, ":")
 	if len(parts) != 2 {
-		return nil, fmt.Errorf("invalid line range %q", selector)
+		return nil, invalidLineRangeError(selector)
 	}
 
 	start, err := parsePositiveInt(parts[0])
 	if err != nil {
-		return nil, fmt.Errorf("invalid line range %q", selector)
+		return nil, invalidLineRangeError(selector)
 	}
 	end, err := parsePositiveInt(parts[1])
 	if err != nil {
-		return nil, fmt.Errorf("invalid line range %q", selector)
+		return nil, invalidLineRangeError(selector)
 	}
 
 	if start > end {
@@ -132,4 +132,8 @@ func parsePositiveInt(v string) (int, error) {
 		return 0, fmt.Errorf("expected positive integer")
 	}
 	return n, nil
+}
+
+func invalidLineRangeError(selector string) error {
+	return fmt.Errorf("invalid line range %q", selector)
 }
