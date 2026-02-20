@@ -1,6 +1,6 @@
 # gophershot
 
-Render Go source code into a PNG image.
+Render source code into a PNG image.
 
 ## Build
 
@@ -15,24 +15,42 @@ go build -o bin/gophershot ./cmd/gophershot
 Using the built binary:
 
 ```bash
-./bin/gophershot --out example.png internal/app/run.go
+./bin/gophershot --out example/go-example.png internal/app/run.go
+```
+
+`runParsed` section example (lines `55:89`, no transforms):
+
+```bash
+./bin/gophershot --out example/go-example.png --transform= --lines 55:89 internal/app/run.go
+```
+
+Terraform file:
+
+```bash
+./bin/gophershot --out example/tf-example.png example/main.tf
 ```
 
 From stdin:
 
 ```bash
-cat internal/app/run.go | ./bin/gophershot --out example.png
+cat internal/app/run.go | ./bin/gophershot --out example/go-example.png
 ```
 
 ## Example output
 
-![gophershot example output](example.png)
+Go example:
+
+![gophershot Go example output](example/go-example.png)
+
+Terraform example:
+
+![gophershot Terraform example output](example/tf-example.png)
 
 ## Common options
 
 ```bash
 ./bin/gophershot \
-  --out example.png \
+  --out example/go-example.png \
   --transform stripimports,errcompact \
   --lines 15:40,44,48:52 \
   --line-numbers=true \
@@ -44,7 +62,7 @@ cat internal/app/run.go | ./bin/gophershot --out example.png
 
 - `--out <path>`: output PNG path (required)
 - `--lines <selector>`: comma-separated segments, each segment is a line (`7`) or range (`5:9`); if repeated, the last value is used
-- `--transform <names>`: comma-separated names, applied in order; if repeated, the last value is used; defaults to `stripimports,errcompact` when omitted
+- `--transform <names>`: comma-separated names, applied in order; if repeated, the last value is used; when omitted defaults are language-aware (`stripimports,errcompact` for Go/stdin, none for `.tf`)
 - `--line-numbers[=true|false]`: show line numbers (default: `true`)
 - `--font-size <float>`: code font size in points, must be `> 0` (default: `16`)
 - `-h`, `--help`: show help
@@ -58,6 +76,7 @@ cat internal/app/run.go | ./bin/gophershot --out example.png
 
 - Transforms run on the full file first.
 - Line selection is applied after transforms, using original source line origins.
+- Built-in transforms are Go-oriented; when input is `.tf`, omitted `--transform` defaults to no transforms.
 - Flags must be provided before the input path.
 
 ## Development

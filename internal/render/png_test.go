@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jacoelho/gophershot/internal/doc"
+	"github.com/jacoelho/gophershot/internal/lang"
 )
 
 func TestRenderPNGProducesImage(t *testing.T) {
@@ -156,15 +157,102 @@ func TestNormalizeRenderableTextReplacesTabAndOddSpaces(t *testing.T) {
 func TestTokenizeRemovesTabsFromSegments(t *testing.T) {
 	t.Parallel()
 
-	lines, err := tokenize("package main\nfunc main() {\n\tprintln(42)\n}\n")
-	if err != nil {
-		t.Fatalf("tokenize: %v", err)
-	}
+	lines := tokenize("package main\nfunc main() {\n\tprintln(42)\n}\n", lang.LanguageGo)
 	for _, line := range lines {
 		for _, seg := range line {
 			if strings.ContainsRune(seg.text, '\t') {
 				t.Fatalf("segment still has tab: %q", seg.text)
 			}
 		}
+	}
+}
+
+func TestTokenizeTerraformProducesColoredSegments(t *testing.T) {
+	t.Parallel()
+
+	lines := tokenize(`resource "aws_s3_bucket" "logs" {
+  bucket = "my-logs"
+  count  = 2
+  # keep logs
+}
+`, lang.LanguageTerraform)
+
+	if len(lines) == 0 {
+		t.Fatal("expected tokenized lines")
+	}
+
+	hasComment := false
+	hasString := false
+	for _, line := range lines {
+		for _, seg := range line {
+			switch seg.color {
+			case colorForClass(tokenClassComment):
+				hasComment = true
+			case colorForClass(tokenClassString):
+				hasString = true
+			}
+		}
+	}
+	if !hasComment {
+		t.Fatal("expected terraform comment segment")
+	}
+	if !hasString {
+		t.Fatal("expected terraform string segment")
+	}
+}
+
+func TestTokenizeGoHighlightsFunctionAndSelectorIdentifiers(t *testing.T) {
+	t.Parallel()
+
+	lines := tokenize(`func runParsed() {
+	_ = plan.NewService
+	_, _ = plan.Compile(plan.Request{}, nil)
+}
+`, lang.LanguageGo)
+
+	targets := map[string]bool{
+		"runParsed":  false,
+		"NewService": false,
+		"Compile":    false,
+	}
+
+	for _, line := range lines {
+		for _, seg := range line {
+			if _, ok := targets[seg.text]; !ok {
+				continue
+			}
+			if seg.color == colorForClass(tokenClassTypeOrBuiltin) {
+				targets[seg.text] = true
+			}
+		}
+	}
+
+	for name, found := range targets {
+		if !found {
+			t.Fatalf("expected %s to be colorized as function/selector", name)
+		}
+	}
+}
+
+func TestRenderPNGTerraformInputProducesImage(t *testing.T) {
+	t.Parallel()
+
+	input := doc.FromSource([]byte(`terraform {
+  required_version = ">= 1.6.0"
+}
+`))
+
+	var out bytes.Buffer
+	err := ToPNG(input, &out, Options{Language: lang.LanguageTerraform})
+	if err != nil {
+		t.Fatalf("render terraform: %v", err)
+	}
+
+	img, err := png.Decode(bytes.NewReader(out.Bytes()))
+	if err != nil {
+		t.Fatalf("decode terraform png: %v", err)
+	}
+	if img.Bounds().Dx() <= 0 || img.Bounds().Dy() <= 0 {
+		t.Fatalf("invalid image bounds: %v", img.Bounds())
 	}
 }

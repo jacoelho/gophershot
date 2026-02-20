@@ -124,6 +124,63 @@ func f() error {
 	}
 }
 
+func TestRunTerraformInputAndLineSelection(t *testing.T) {
+	tmp := t.TempDir()
+	input := filepath.Join(tmp, "infra.tf")
+	fullOutput := filepath.Join(tmp, "full.png")
+	selectedOutput := filepath.Join(tmp, "selected.png")
+
+	src := `terraform {
+  required_version = ">= 1.6.0"
+}
+
+resource "null_resource" "example" {}
+`
+	if err := os.WriteFile(input, []byte(src), 0o644); err != nil {
+		t.Fatalf("write input: %v", err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	code := run([]string{"--out", fullOutput, input}, bytes.NewBuffer(nil), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("full render exit code = %d, want 0 (stderr=%q)", code, stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	code = run([]string{"--out", selectedOutput, "--lines", "2:4", input}, bytes.NewBuffer(nil), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("selected render exit code = %d, want 0 (stderr=%q)", code, stderr.String())
+	}
+
+	fullFile, err := os.Open(fullOutput)
+	if err != nil {
+		t.Fatalf("open full output: %v", err)
+	}
+	defer fullFile.Close()
+
+	fullImg, err := png.Decode(fullFile)
+	if err != nil {
+		t.Fatalf("decode full png: %v", err)
+	}
+
+	selectedFile, err := os.Open(selectedOutput)
+	if err != nil {
+		t.Fatalf("open selected output: %v", err)
+	}
+	defer selectedFile.Close()
+
+	selectedImg, err := png.Decode(selectedFile)
+	if err != nil {
+		t.Fatalf("decode selected png: %v", err)
+	}
+
+	if selectedImg.Bounds().Dy() >= fullImg.Bounds().Dy() {
+		t.Fatalf("expected selected image height < full image height, selected=%d full=%d", selectedImg.Bounds().Dy(), fullImg.Bounds().Dy())
+	}
+}
+
 func TestRunHelp(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer

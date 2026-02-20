@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jacoelho/gophershot/internal/lang"
 	"github.com/jacoelho/gophershot/internal/lines"
 	"github.com/jacoelho/gophershot/internal/transform"
 )
@@ -24,6 +25,7 @@ type Request struct {
 type RenderOptions struct {
 	ShowLineNumbers bool
 	FontSize        float64
+	Language        lang.Language
 }
 
 type Plan struct {
