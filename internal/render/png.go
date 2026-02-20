@@ -15,9 +15,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/alecthomas/chroma/v2"
-	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/jacoelho/gophershot/internal/doc"
+	"github.com/jacoelho/gophershot/internal/lang"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/opentype"
 	"golang.org/x/image/math/fixed"
@@ -38,6 +37,7 @@ type Options struct {
 	LineHeight      float64
 	Padding         int
 	ShowLineNumbers bool
+	Language        lang.Language
 
 	lineNumbersSet bool
 }
@@ -81,10 +81,7 @@ func ToPNG(input doc.Document, w io.Writer, opts Options) error {
 		defer c.Close()
 	}
 
-	tokenLines, err := tokenize(string(renderDoc.Bytes()))
-	if err != nil {
-		return err
-	}
+	tokenLines := tokenize(string(renderDoc.Bytes()), opts.Language)
 	normalizedSegments := normalizeSegmentLines(tokenLines, len(renderDoc.Lines))
 
 	lineHeightPx := max(int(math.Ceil(opts.FontSize*opts.LineHeight)), 1)
@@ -178,6 +175,9 @@ func (o Options) withDefaults() Options {
 	if !o.lineNumbersSet {
 		o.ShowLineNumbers = true
 	}
+	if o.Language == "" {
+		o.Language = lang.LanguageGo
+	}
 	return o
 }
 
@@ -194,39 +194,6 @@ func normalizeSegmentLines(lines [][]segment, expected int) [][]segment {
 		}
 	}
 	return out
-}
-
-func tokenize(src string) ([][]segment, error) {
-	lexer := lexers.Get("go")
-	if lexer == nil {
-		lexer = lexers.Fallback
-	}
-
-	iter, err := lexer.Tokenise(nil, src)
-	if err != nil {
-		return nil, fmt.Errorf("tokenize source: %w", err)
-	}
-
-	lines := make([][]segment, 1)
-	for tok := iter(); tok != chroma.EOF; tok = iter() {
-		if tok.Value == "" {
-			continue
-		}
-		parts := strings.Split(normalizeRenderableText(tok.Value), "\n")
-		for i, part := range parts {
-			if part != "" {
-				lines[len(lines)-1] = append(lines[len(lines)-1], segment{text: part, color: colorForToken(tok.Type)})
-			}
-			if i < len(parts)-1 {
-				lines = append(lines, []segment{})
-			}
-		}
-	}
-
-	if len(lines) == 0 {
-		return [][]segment{{}}, nil
-	}
-	return lines, nil
 }
 
 func normalizeRenderableText(text string) string {
@@ -293,23 +260,4 @@ func isContiguous(values []int) bool {
 		}
 	}
 	return true
-}
-
-func colorForToken(tt chroma.TokenType) color.RGBA {
-	switch tt {
-	case chroma.Keyword, chroma.KeywordConstant, chroma.KeywordDeclaration, chroma.KeywordNamespace, chroma.KeywordPseudo, chroma.KeywordReserved, chroma.KeywordType:
-		return color.RGBA{R: 0xCF, G: 0x22, B: 0x5B, A: 0xFF}
-	case chroma.NameBuiltin, chroma.NameBuiltinPseudo, chroma.NameClass, chroma.NameFunction, chroma.NameFunctionMagic, chroma.NameNamespace:
-		return color.RGBA{R: 0x82, G: 0x55, B: 0xD7, A: 0xFF}
-	case chroma.LiteralString, chroma.LiteralStringAffix, chroma.LiteralStringAtom, chroma.LiteralStringBacktick, chroma.LiteralStringChar, chroma.LiteralStringDelimiter, chroma.LiteralStringDoc, chroma.LiteralStringDouble, chroma.LiteralStringEscape, chroma.LiteralStringHeredoc, chroma.LiteralStringInterpol, chroma.LiteralStringOther, chroma.LiteralStringRegex, chroma.LiteralStringSingle, chroma.LiteralStringSymbol:
-		return color.RGBA{R: 0x0A, G: 0x7E, B: 0x39, A: 0xFF}
-	case chroma.LiteralNumber, chroma.LiteralNumberBin, chroma.LiteralNumberFloat, chroma.LiteralNumberHex, chroma.LiteralNumberInteger, chroma.LiteralNumberIntegerLong, chroma.LiteralNumberOct:
-		return color.RGBA{R: 0x05, G: 0x5D, B: 0xB5, A: 0xFF}
-	case chroma.Comment, chroma.CommentHashbang, chroma.CommentMultiline, chroma.CommentPreproc, chroma.CommentPreprocFile, chroma.CommentSingle, chroma.CommentSpecial:
-		return color.RGBA{R: 0x57, G: 0x6A, B: 0x73, A: 0xFF}
-	case chroma.Operator, chroma.OperatorWord, chroma.Punctuation:
-		return color.RGBA{R: 0x24, G: 0x2A, B: 0x2F, A: 0xFF}
-	default:
-		return defaultColor
-	}
 }

@@ -68,6 +68,18 @@ func TestParseDefaultsTransformsWhenUnset(t *testing.T) {
 	}
 }
 
+func TestParseTerraformDefaultsNoTransformsWhenUnset(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := Parse([]string{"--out", "out.png", "main.tf"})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(cfg.Transforms) != 0 {
+		t.Fatalf("transforms = %#v, want empty", cfg.Transforms)
+	}
+}
+
 func TestParseExplicitTransformsOverrideDefaults(t *testing.T) {
 	t.Parallel()
 
@@ -77,6 +89,20 @@ func TestParseExplicitTransformsOverrideDefaults(t *testing.T) {
 	}
 
 	want := []string{"custom"}
+	if !reflect.DeepEqual(cfg.Transforms, want) {
+		t.Fatalf("transforms = %#v, want %#v", cfg.Transforms, want)
+	}
+}
+
+func TestParseTerraformExplicitTransformsOverrideDefaults(t *testing.T) {
+	t.Parallel()
+
+	cfg, err := Parse([]string{"--out", "out.png", "--transform", "stripimports", "main.tf"})
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+
+	want := []string{"stripimports"}
 	if !reflect.DeepEqual(cfg.Transforms, want) {
 		t.Fatalf("transforms = %#v, want %#v", cfg.Transforms, want)
 	}

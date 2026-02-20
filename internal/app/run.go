@@ -7,6 +7,7 @@ import (
 
 	"github.com/jacoelho/gophershot/internal/config"
 	"github.com/jacoelho/gophershot/internal/doc"
+	"github.com/jacoelho/gophershot/internal/lang"
 	"github.com/jacoelho/gophershot/internal/pipeline"
 	"github.com/jacoelho/gophershot/internal/plan"
 	"github.com/jacoelho/gophershot/internal/render"
@@ -29,7 +30,10 @@ type service struct {
 func NewService() service {
 	return service{
 		renderImage: func(input doc.Document, w io.Writer, opts plan.RenderOptions) error {
-			renderOpts := render.Options{FontSize: opts.FontSize}.WithLineNumbers(opts.ShowLineNumbers)
+			renderOpts := render.Options{
+				FontSize: opts.FontSize,
+				Language: opts.Language,
+			}.WithLineNumbers(opts.ShowLineNumbers)
 			return render.ToPNG(input, w, renderOpts)
 		},
 		catalog: transform.NewDefaultRegistry(),
@@ -65,6 +69,7 @@ func (s service) runParsed(cfg config.Config, input io.Reader, output io.Writer)
 	if err != nil {
 		return err
 	}
+	compiled.Render.Language = lang.FromInputPath(cfg.InputPath)
 
 	src, err := io.ReadAll(input)
 	if err != nil {

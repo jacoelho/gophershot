@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/jacoelho/gophershot/internal/lang"
 )
 
 var ErrHelp = errors.New("help requested")
@@ -20,8 +22,7 @@ type Config struct {
 }
 
 var (
-	defaultTransforms       = []string{"stripimports", "errcompact"}
-	defaultTransformsString = strings.Join(defaultTransforms, ",")
+	defaultTransforms = []string{"stripimports", "errcompact"}
 )
 
 func HelpText(availableTransforms []string) string {
@@ -62,12 +63,20 @@ func Parse(args []string) (Config, error) {
 		return Config{}, fmt.Errorf("--font-size expects a value greater than zero, got %v", fontSize)
 	}
 
-	transforms, err := parseCommaSeparated("--transform", opts.transformRaw)
-	if err != nil {
-		return Config{}, err
-	}
-	if len(transforms) == 0 {
-		transforms = append(transforms, defaultTransforms...)
+	transformProvided := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "transform" {
+			transformProvided = true
+		}
+	})
+
+	transforms := defaultTransformsForPath(inputPath)
+	if transformProvided {
+		var err error
+		transforms, err = parseCommaSeparated("--transform", opts.transformRaw)
+		if err != nil {
+			return Config{}, err
+		}
 	}
 
 	return Config{
@@ -94,7 +103,7 @@ func newFlagSet(name string, availableTransforms []string) (*flag.FlagSet, *pars
 	fs := flag.NewFlagSet(name, flag.ContinueOnError)
 	fs.StringVar(&opts.outputPath, "out", "", "output PNG path (required)")
 	fs.StringVar(&opts.lineSelectorRaw, "lines", "", "comma-separated line selector segments; each segment is a line (7) or range (5:9)")
-	fs.StringVar(&opts.transformRaw, "transform", defaultTransformsString, transformUsage(availableTransforms))
+	fs.StringVar(&opts.transformRaw, "transform", "", transformUsage(availableTransforms))
 	fs.BoolVar(&opts.lineNumbers, "line-numbers", true, "render line numbers in the output image")
 	fs.Float64Var(&opts.fontSize, "font-size", 16, "font size in points for rendered code text")
 
@@ -107,6 +116,15 @@ func transformUsage(availableTransforms []string) string {
 		available = strings.Join(defaultTransforms, ", ")
 	}
 	return fmt.Sprintf("comma-separated list of transform names, applied in order (available: %s)", available)
+}
+
+func defaultTransformsForPath(inputPath string) []string {
+	switch lang.FromInputPath(inputPath) {
+	case lang.LanguageTerraform:
+		return []string{}
+	default:
+		return append([]string{}, defaultTransforms...)
+	}
 }
 
 func parseCommaSeparated(flagName, value string) ([]string, error) {
